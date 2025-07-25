@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -96,5 +98,42 @@ func TestStorageDeleteNonExistentKey(t *testing.T) {
 	expectedErr := "key nonexistent does not exist"
 	if err.Error() != expectedErr {
 		t.Errorf("expected error '%s', got '%s'", expectedErr, err.Error())
+	}
+}
+
+// test for concurrent write and read operations
+func TestStorageConcurrentAccess(t *testing.T) {
+	s := NewStorage()
+	var wg sync.WaitGroup
+
+	// Start concurrent writes
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			s.Set(fmt.Sprintf("key%d", i), fmt.Sprintf("value%d", i))
+		}
+	}()
+
+	// Start concurrent reads
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			// It's possible some keys aren't written yet, so ignore missing keys
+			val, err := s.Get(fmt.Sprintf("key%d", i))
+			if err == nil {
+				expected := fmt.Sprintf("value%d", i)
+				if val != expected {
+					t.Errorf("expected %s, got %s", expected, val)
+				}
+			}
+		}
+	}()
+
+	wg.Wait()
+
+	if s.Size() != 100 {
+		t.Errorf("expected size 100, got %d", s.Size())
 	}
 }
