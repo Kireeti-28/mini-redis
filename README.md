@@ -89,22 +89,10 @@ internal/storage/   # Persistent storage implementation
 
 ---
 
-## Possible Enhancements
+## Possible Enhancements (TBD)
 
 - Add TTL (expiration) support for keys
 - Return 404 for missing keys instead of 500
 - Add endpoint to list all keys
 - Add authentication
 - Docker support
-
----
-
-## License
-
-MIT License (add your license here)
-
----
-
-## Author
-
-[kireeti-28](https://github.com/kireeti-28)
