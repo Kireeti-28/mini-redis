@@ -3,23 +3,32 @@ package main
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/kireeti-28/mini-redis/internal/storage"
 )
 
+const filename = "storage.log"
+
 type apiConfig struct {
-	port  string
-	store *storage.Storage
+	port   string
+	store  *storage.Storage
+	logger *slog.Logger
 }
 
 func main() {
-	cfg := apiConfig{
-		port:  "9686",
-		store: storage.NewStorage(),
+	storage, err := storage.NewStorage(filename)
+	if err != nil {
+		fmt.Printf("Error initializing storage: %v\n", err)
+		return
 	}
 
-	fmt.Printf("Server starting on port: %s\n", cfg.port)
+	cfg := apiConfig{
+		port:   "9686",
+		store:  storage,
+		logger: slog.Default(),
+	}
 
 	http.HandleFunc("GET /kv/{key}", cfg.getHandler)
 	http.HandleFunc("POST /kv/{key}", cfg.setHandler)
@@ -33,6 +42,7 @@ func (cfg *apiConfig) getHandler(w http.ResponseWriter, r *http.Request) {
 	value, err := cfg.store.Get(key)
 
 	if err != nil {
+		cfg.logger.Error("Failed to get value", "key", key, "error", err)
 		respondWithError(w, http.StatusInternalServerError, err.Error(), err)
 		return
 	}
@@ -45,12 +55,18 @@ func (cfg *apiConfig) setHandler(w http.ResponseWriter, r *http.Request) {
 
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
+		cfg.logger.Error("Failed to read request body", "error", err)
 		respondWithError(w, http.StatusInternalServerError, "unable to read body", err)
 		return
 	}
 
 	value := string(data)
-	cfg.store.Set(key, value)
+	err = cfg.store.Set(key, value)
+	if err != nil {
+		cfg.logger.Error("Failed to set value", "key", key, "value", value, "error", err)
+		respondWithError(w, http.StatusInternalServerError, err.Error(), err)
+		return
+	}
 	respondWithJSON(w, http.StatusOK, map[string]string{"Key": key, "Value": value})
 }
 
@@ -59,6 +75,7 @@ func (cfg *apiConfig) deleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	err := cfg.store.Delete(key)
 	if err != nil {
+		cfg.logger.Error("Failed to delete key", "key", key, "error", err)
 		respondWithError(w, http.StatusInternalServerError, err.Error(), err)
 		return
 	}

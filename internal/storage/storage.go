@@ -1,31 +1,41 @@
 package storage
 
 import (
-	"encoding/json"
+	"bufio"
 	"fmt"
+	"log/slog"
 	"os"
+	"strings"
 	"sync"
 )
 
-const filename = "storage.json"
+var storageLogger = slog.Default()
 
 type Storage struct {
 	kvStore map[string]string
 	mu      sync.RWMutex
+	logFile *os.File
 }
 
-func NewStorage() *Storage {
+func NewStorage(filename string) (*Storage, error) {
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open log file %s: %v", filename, err)
+	}
+
 	s := &Storage{
 		kvStore: make(map[string]string),
 		mu:      sync.RWMutex{},
+		logFile: file,
 	}
 
-	err := s.load()
+	err = s.replayLogs(filename)
 	if err != nil {
-		fmt.Printf("Error loading storage: %v\n", err)
+		s.Close()
+		return nil, fmt.Errorf("failed to replay logs: %v", err)
 	}
 
-	return s
+	return s, nil
 }
 
 func (s *Storage) Get(key string) (string, error) {
@@ -40,12 +50,18 @@ func (s *Storage) Get(key string) (string, error) {
 	return value, nil
 }
 
-func (s *Storage) Set(key, value string) {
+func (s *Storage) Set(key, value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.kvStore[key] = value
-	s.persist()
+
+	_, err := s.logFile.WriteString(fmt.Sprintf("SET,%s,%s\n", key, value))
+	if err != nil {
+		return fmt.Errorf("failed to write to log file: %v", err)
+	}
+
+	return nil
 }
 
 func (s *Storage) Delete(key string) error {
@@ -56,42 +72,56 @@ func (s *Storage) Delete(key string) error {
 		return fmt.Errorf("key %s does not exist", key)
 	}
 	delete(s.kvStore, key)
-	s.persist()
 
-	return nil
-}
-
-func (s *Storage) persist() error {
-	file, err := os.Create(filename)
+	_, err := s.logFile.WriteString(fmt.Sprintf("DEL,%s\n", key))
 	if err != nil {
-		return fmt.Errorf("failed to create file %s: %v", filename, err)
-	}
-	defer file.Close()
-
-	err = json.NewEncoder(file).Encode(s.kvStore)
-	if err != nil {
-		return fmt.Errorf("failed to encode JSON to file %s: %v", filename, err)
+		return fmt.Errorf("failed to write to log file: %v", err)
 	}
 
 	return nil
 }
 
-func (s *Storage) load() error {
-	file, err := os.Open(filename)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // File does not exist, nothing to load
+func (s *Storage) replayLogs(filename string) error {
+	storageLogger.Info("Replaying logs from file", "filename", filename)
+
+	s.logFile.Seek(0, 0) // Reset file pointer to the beginning
+	scanner := bufio.NewScanner(s.logFile)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Split(line, ",")
+		if len(parts) < 2 {
+			storageLogger.Info("Invalid log entry", "line", line)
+			continue
 		}
-		return fmt.Errorf("failed to open file %s: %v", filename, err)
-	}
-	defer file.Close()
 
-	err = json.NewDecoder(file).Decode(&s.kvStore)
-	if err != nil {
-		return fmt.Errorf("failed to decode JSON from file %s: %v", filename, err)
+		switch parts[0] {
+		case "SET":
+			if len(parts) != 3 {
+				storageLogger.Info("Invalid SET entry", "line", line)
+				continue
+			}
+			s.kvStore[parts[1]] = parts[2]
+		case "DEL":
+			if len(parts) != 2 {
+				storageLogger.Info("Invalid DEL entry", "line", line)
+				continue
+			}
+			delete(s.kvStore, parts[1])
+		default:
+			storageLogger.Info("Unknown command in log", "line", line)
+			continue
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error reading log file: %v", err)
 	}
 
+	storageLogger.Info("Finished replaying logs", "count", len(s.kvStore))
 	return nil
+}
+
+func (s *Storage) Close() error {
+	return s.logFile.Close()
 }
 
 func (s *Storage) Size() int {
