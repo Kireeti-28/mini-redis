@@ -1,4 +1,4 @@
-# mini-redis-go
+# mini-redis
 
 A minimal Redis-like persistent key-value store written in Go, with a simple REST API.
 
@@ -92,7 +92,6 @@ internal/storage/   # Persistent storage implementation
 ## Possible Enhancements (TBD)
 
 - Add TTL (expiration) support for keys
-- Return 404 for missing keys instead of 500
 - Add endpoint to list all keys
 - Add authentication
 - Docker support
