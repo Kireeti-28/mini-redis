@@ -50,6 +50,13 @@ func (s *Storage) Get(key string) (string, error) {
 	return value, nil
 }
 
+func (s *Storage) GetAll() map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.kvStore
+}
+
 func (s *Storage) Set(key, value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

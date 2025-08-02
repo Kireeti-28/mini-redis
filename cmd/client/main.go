@@ -85,10 +85,7 @@ func validInput(input string) ([]string, error) {
 			return nil, fmt.Errorf("invalid input: %v", input)
 		}
 	case "view":
-		return nil, fmt.Errorf("not support yet")
-
 	case "help":
-
 	default:
 		return nil, fmt.Errorf("invalid input %v", input)
 	}
@@ -105,7 +102,7 @@ func storeGet(key string) {
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("failed to marshal %v\n", err)
+		fmt.Printf("failed to read resp body %v\n", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -122,9 +119,10 @@ func storeSet(key, value string) {
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("failed to marshal %v\n", err)
+		fmt.Printf("failed to read resp body %v\n", err)
 		return
 	}
+	defer resp.Body.Close()
 
 	fmt.Println(string(data))
 }
@@ -139,16 +137,32 @@ func storeDelete(key string) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		fmt.Printf("failed to make reqeust %v\n", err)
+		return
 	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("failed to marshal %v\n", err)
+		fmt.Printf("failed to read resp body %v\n", err)
 		return
 	}
+	defer resp.Body.Close()
 
 	fmt.Println(string(data))
 }
 
 func storeView() {
+	resp, err := http.Get(serverBaseURL)
+	if err != nil {
+		fmt.Printf("failed to make request: %v\n", err)
+		return
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("failed to read resp body %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	fmt.Println(string(data))
 }

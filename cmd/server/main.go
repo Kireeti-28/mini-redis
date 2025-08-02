@@ -30,11 +30,16 @@ func main() {
 		logger: slog.Default(),
 	}
 
+	http.HandleFunc("GET /kv", cfg.getAllHandler)
 	http.HandleFunc("GET /kv/{key}", cfg.getHandler)
 	http.HandleFunc("POST /kv/{key}", cfg.setHandler)
 	http.HandleFunc("DELETE /kv/{key}", cfg.deleteHandler)
 
 	fmt.Println(http.ListenAndServe(":"+cfg.port, nil))
+}
+
+func (cfg *apiConfig) getAllHandler(w http.ResponseWriter, r *http.Request) {
+	respondWithJSON(w, http.StatusOK, cfg.store.GetAll())
 }
 
 func (cfg *apiConfig) getHandler(w http.ResponseWriter, r *http.Request) {
